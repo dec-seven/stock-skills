@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A股收盘日报 · {{TRADE_DATE}}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        /* 颜色定义 - 中国股市惯例 */
+        .up { color: #e8403c; }
+        .down { color: #22b86b; }
+        .flat { color: #888; }
+
+        /* 容器 */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 20px 40px 20px;
+        }
+
+        /* 头部 */
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            padding: 50px 30px;
+            text-align: center;
+            margin-bottom: 0;
+            position: relative;
+        }
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #e8403c, #f39c12, #22b86b);
+        }
+        .header h1 {
+            font-size: 2.4em;
+            margin-bottom: 8px;
+            font-weight: 600;
+            letter-spacing: 2px;
+        }
+        .header .subtitle {
+            opacity: 0.85;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+        .header .date {
+            margin-top: 12px;
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+
+        /* 核心摘要区 - 特殊样式 */
+        .summary-section {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 30px;
+            margin-bottom: 25px;
+            border-radius: 0 0 16px 16px;
+        }
+        .summary-section .section-title {
+            color: #f39c12;
+            border-bottom-color: rgba(255,255,255,0.2);
+            margin-bottom: 15px;
+        }
+        .summary-section .section-title::before {
+            background: #f39c12;
+        }
+        .summary-section .narrative {
+            color: rgba(255,255,255,0.9);
+            font-size: 1.05em;
+            line-height: 1.9;
+        }
+
+        /* 指数速览 - 卡片网格 */
+        .index-overview {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .index-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 15px;
+            text-align: center;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .index-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+        }
+        .index-card .name {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        .index-card .value {
+            font-size: 1.6em;
+            font-weight: 700;
+            margin-bottom: 6px;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        }
+        .index-card .pct {
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        /* KPI 卡片 - 市场宽度 */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 0;
+        }
+        .kpi-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px 20px;
+            text-align: center;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        .kpi-card .label {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        .kpi-card .number {
+            font-size: 2.2em;
+            font-weight: 700;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        }
+        .kpi-card.up-card {
+            border-top: 3px solid #e8403c;
+        }
+        .kpi-card.down-card {
+            border-top: 3px solid #22b86b;
+        }
+
+        /* 区块 */
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }
+        .section-title {
+            font-size: 1.15em;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #1a1a2e;
+        }
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 18px;
+            background: linear-gradient(180deg, #1a1a2e, #0f3460);
+            border-radius: 2px;
+        }
+
+        /* 表格 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95em;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9em;
+        }
+        td.num {
+            text-align: right;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        }
+        tr:hover {
+            background: #fafafa;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* 标签 */
+        .tag-up {
+            background: #fee2e2;
+            color: #e8403c;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        .tag-down {
+            background: #d1fae5;
+            color: #22b86b;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        /* 文本段落 */
+        .narrative {
+            line-height: 1.9;
+            color: #444;
+            text-align: justify;
+        }
+        .narrative p {
+            margin-bottom: 12px;
+        }
+
+        /* 双栏布局 */
+        .two-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+        .two-cols h4 {
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid currentColor;
+        }
+        @media (max-width: 768px) {
+            .two-cols { grid-template-columns: 1fr; }
+            .index-overview { grid-template-columns: repeat(2, 1fr); }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* 风险提示 */
+        .risk-box {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+            border-left: 4px solid #f0ad4e;
+            padding: 20px 25px;
+            margin: 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .risk-box h4 {
+            color: #856404;
+            margin-bottom: 12px;
+            font-size: 1em;
+        }
+        .risk-box ul {
+            margin-left: 20px;
+        }
+        .risk-box li {
+            margin-bottom: 8px;
+            color: #856404;
+            line-height: 1.6;
+        }
+
+        /* 情景预案 */
+        .scenario {
+            background: linear-gradient(135deg, #e8f4fd 0%, #d1e9f6 100%);
+            border-radius: 10px;
+            padding: 20px 25px;
+            margin: 15px 0;
+            border-left: 4px solid #1a73e8;
+        }
+        .scenario h4 {
+            color: #1557b0;
+            margin-bottom: 12px;
+            font-size: 1em;
+        }
+        .scenario p {
+            color: #2c5282;
+            line-height: 1.7;
+        }
+
+        /* 数据卡片组 */
+        .data-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .data-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        .data-card .label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .data-card .value {
+            font-size: 1.4em;
+            font-weight: 600;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            padding: 35px 20px;
+            color: #888;
+            font-size: 0.85em;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 30px;
+            background: white;
+        }
+        .footer p {
+            margin-bottom: 5px;
+        }
+        .footer .disclaimer {
+            color: #aaa;
+            font-size: 0.9em;
+        }
+
+        /* 打印优化 */
+        @media print {
+            body {
+                background: white;
+                font-size: 12px;
+            }
+            .section {
+                box-shadow: none;
+                border: 1px solid #e0e0e0;
+                page-break-inside: avoid;
+            }
+            .header {
+                box-shadow: none;
+            }
+            .container {
+                max-width: 100%;
+                padding: 0;
+            }
+            .index-card:hover,
+            .kpi-card:hover {
+                transform: none;
+                box-shadow: none;
+            }
+        }
+
+        /* 分隔线 */
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #e0e0e0, transparent);
+            margin: 25px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>A股收盘日报</h1>
+        <div class="subtitle">{{WEEKDAY}} · 市场复盘</div>
+        <div class="date">{{TRADE_DATE}} | 生成时间: {{GENERATED_AT}}</div>
+    </div>
+
+    <div class="container">
+        <!-- 核心摘要 - 深色背景 -->
+        <div class="summary-section">
+            <div class="section-title">核心摘要</div>
+            <div class="narrative">
+                <p>{{SUMMARY}}</p>
+            </div>
+        </div>
+
+        <!-- 指数速览 -->
+        <div class="section">
+            <div class="section-title">指数速览</div>
+            <div class="index-overview">{{INDEX_CARDS}}</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>指数名称</th>
+                        <th>代码</th>
+                        <th>收盘价</th>
+                        <th>涨跌幅</th>
+                        <th>涨跌点数</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>{{INDEX_TABLE}}</tbody>
+            </table>
+        </div>
+
+        <!-- 市场宽度 -->
+        <div class="section">
+            <div class="section-title">市场宽度</div>
+            <div class="kpi-grid">{{KPI_CARDS}}</div>
+        </div>
+
+        <!-- 日内走势复盘 -->
+        <div class="section">
+            <div class="section-title">日内走势复盘</div>
+            <div class="narrative">
+                <p>{{INTRADAY_REVIEW}}</p>
+            </div>
+        </div>
+
+        <!-- 行业表现 -->
+        <div class="section">
+            <div class="section-title">行业表现</div>
+            <div class="two-cols">
+                <div>
+                    <h4 class="up">涨幅前五</h4>
+                    <table>
+                        <thead><tr><th>行业</th><th class="num">涨跌幅</th></tr></thead>
+                        <tbody>{{SECTOR_TOP_TABLE}}</tbody>
+                    </table>
+                </div>
+                <div>
+                    <h4 class="down">跌幅前五</h4>
+                    <table>
+                        <thead><tr><th>行业</th><th class="num">涨跌幅</th></tr></thead>
+                        <tbody>{{SECTOR_BOTTOM_TABLE}}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主力资金 -->
+        <div class="section">
+            <div class="section-title">主力资金流向</div>
+            <div class="two-cols">
+                <div>
+                    <h4 class="up">净流入 TOP</h4>
+                    <table>
+                        <thead><tr><th>行业</th><th class="num">净额(亿)</th><th class="num">涨跌幅</th></tr></thead>
+                        <tbody>{{MAIN_INFLOW_TABLE}}</tbody>
+                    </table>
+                </div>
+                <div>
+                    <h4 class="down">净流出 TOP</h4>
+                    <table>
+                        <thead><tr><th>行业</th><th class="num">净额(亿)</th><th class="num">涨跌幅</th></tr></thead>
+                        <tbody>{{MAIN_OUTFLOW_TABLE}}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 北向资金 -->
+        <div class="section">
+            <div class="section-title">北向资金</div>
+            <div class="narrative">
+                <p>{{NORTH_BOUND_NARRATIVE}}</p>
+            </div>
+        </div>
+
+        <!-- 概念板块 -->
+        <div class="section">
+            <div class="section-title">概念板块</div>
+            <div class="narrative">
+                <p>{{CONCEPT_NARRATIVE}}</p>
+            </div>
+        </div>
+
+        <!-- 技术面分析 -->
+        <div class="section">
+            <div class="section-title">技术面分析</div>
+            <div class="narrative">
+                <p>{{TECHNICAL_ANALYSIS}}</p>
+            </div>
+        </div>
+
+        <!-- 涨停板 -->
+        <div class="section">
+            <div class="section-title">涨停板</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th>代码</th>
+                        <th class="num">涨跌幅</th>
+                        <th>所属行业</th>
+                    </tr>
+                </thead>
+                <tbody>{{LIMIT_UP_TABLE}}</tbody>
+            </table>
+        </div>
+
+        <!-- 龙虎榜 -->
+        <div class="section">
+            <div class="section-title">龙虎榜</div>
+            <div class="narrative">
+                <p>{{DRAGON_TIGER}}</p>
+            </div>
+        </div>
+
+        <!-- 两融数据 -->
+        <div class="section">
+            <div class="section-title">融资融券</div>
+            <div class="narrative">
+                <p>{{MARGIN_TRADING}}</p>
+            </div>
+        </div>
+
+        <!-- 重大公告 -->
+        <div class="section">
+            <div class="section-title">重大公告</div>
+            <div class="narrative">
+                <p>{{ANNOUNCEMENTS}}</p>
+            </div>
+        </div>
+
+        <!-- 关注清单 -->
+        <div class="section">
+            <div class="section-title">关注清单</div>
+            <div class="narrative">
+                <p>{{WATCHLIST}}</p>
+            </div>
+        </div>
+
+        <!-- 情景预案 -->
+        <div class="section">
+            <div class="section-title">情景预案</div>
+            {{SCENARIO_PLANS}}
+        </div>
+
+        <!-- 风险提示 -->
+        <div class="section">
+            <div class="section-title">风险提示</div>
+            {{RISK_WARNINGS}}
+        </div>
+
+        <!-- 总结 -->
+        <div class="section">
+            <div class="section-title">总结</div>
+            <div class="narrative">
+                <p>{{CONCLUSION}}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p class="disclaimer">免责声明：本报告仅供参考，不构成任何投资建议。投资有风险，入市需谨慎。</p>
+        <p>© {{YEAR}} A股收盘日报 | 数据来源：AkShare / 东方财富</p>
+    </div>
+</body>
+</html>
