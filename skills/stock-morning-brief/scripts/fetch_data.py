@@ -13,6 +13,12 @@
 
 核心前提: 数据务必准确
 """
+
+# 禁用代理（解决沙箱环境中的代理连接问题）
+import os as _os
+for _proxy_var in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY']:
+    _os.environ.pop(_proxy_var, None)
+
 import json
 import sys
 import os
@@ -21,6 +27,9 @@ import time
 import re
 from datetime import datetime, timedelta
 import requests
+
+# 禁用 requests 代理（解决沙箱环境中的代理连接问题）
+requests.Session.trust_env = False
 
 # ==================== 数据源导入 ====================
 
@@ -71,6 +80,7 @@ SINA_API = {
     "科创50": "sh000688",
     "北证50": "bj899050",
     "上证50": "sh000016",
+    "沪深300": "sh000300",
 }
 
 def fetch_sina_quote(code):
@@ -132,6 +142,7 @@ TENCENT_API = {
     "科创50": "sh000688",
     "北证50": "bj899050",
     "上证50": "sh000016",
+    "沪深300": "sh000300",
 }
 
 def fetch_tencent_quote(code):
@@ -176,6 +187,7 @@ EM_INDEX_MAP = {
     "科创50": "1.000688",
     "北证50": "0.899050",
     "上证50": "1.000016",
+    "沪深300": "1.000300",
 }
 
 def fetch_em_quote(secid):
@@ -474,31 +486,84 @@ def fill_sectors(data):
 
 # ==================== 美股数据 ====================
 
+def fetch_tencent_us_quote(symbol):
+    """腾讯美股行情（支持指数）"""
+    url = f"http://qt.gtimg.cn/q=us.{symbol}"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.encoding = "gbk"
+        text = resp.text
+        if "pv_none_match" in text:
+            return None
+        match = re.search(r'="([^"]+)"', text)
+        if match:
+            parts = match.group(1).split("~")
+            if len(parts) >= 5:
+                close = safe_float(parts[3])
+                prev_close = safe_float(parts[4])
+                pct = round((close - prev_close) / prev_close * 100, 2) if close and prev_close else 0
+                return {"close": close, "pct": pct, "source": "tencent"}
+    except:
+        pass
+    return None
+
+
+def fetch_em_us_quote(secid):
+    """东方财富美股行情（支持个股）"""
+    url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f43,f44,f45,f46,f47,f48,f169,f170"
+    try:
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if data and "data" in data and data["data"]:
+            d = data["data"]
+            close = d.get("f43", 0) / 100 if d.get("f43") else None
+            prev_close = d.get("f46", 0) / 100 if d.get("f46") else None
+            pct = d.get("f170", 0) / 100 if d.get("f170") else None
+            if close:
+                return {"close": close, "prev_close": prev_close, "pct": pct, "source": "eastmoney"}
+    except:
+        pass
+    return None
+
+
 def fill_us_data(data):
-    """填充美股数据"""
+    """填充美股数据 - 多数据源优先级：腾讯 > 东方财富 > yfinance"""
     print("\n[INFO] === 填充美股数据 ===", file=sys.stderr)
 
+    # 数据源映射：(key, 腾讯代码, 东方财富secid, yfinance代码)
     ticker_map = {
-        "dow": ("^DJI", "DJI"),
-        "sp500": ("^GSPC", "SPX"),
-        "nasdaq": ("^IXIC", "IXIC"),
-        "vix": ("^VIX", "VIX"),
-        "sox": ("^SOX", "SOX"),
-        "nvda": ("NVDA", "NVDA"),
-        "tsla": ("TSLA", "TSLA"),
-        "oil": ("CL=F", "CL"),
-        "gold": ("GC=F", "GC"),
+        "dow": ("DJI", None, "^DJI"),           # 道琼斯 - 腾讯可用
+        "sp500": ("INX", None, "^GSPC"),         # 标普500 - 腾讯可用
+        "nasdaq": ("IXIC", None, "^IXIC"),       # 纳斯达克 - 腾讯可用
+        "vix": ("VIX", None, "^VIX"),            # VIX - 腾讯可用
+        "sox": (None, None, "^SOX"),             # 费城半导体 - 仅yfinance
+        "nvda": (None, "105.NVDA", "NVDA"),      # 英伟达 - 东方财富可用
+        "tsla": (None, "105.TSLA", "TSLA"),      # 特斯拉 - 东方财富可用
+        "oil": (None, "105.CL", "CL=F"),         # 原油
+        "gold": (None, "105.GC", "GC=F"),        # 黄金
     }
 
-    for key, (yf_symbol, sina_symbol) in ticker_map.items():
+    for key, (tencent_symbol, em_secid, yf_symbol) in ticker_map.items():
         if key not in data["overnight_us"]:
             continue
 
         item = data["overnight_us"][key]
         result = None
 
-        # 1. 尝试 yfinance
-        if YFINANCE_AVAILABLE and not result:
+        # 1. 优先尝试腾讯美股（指数）
+        if tencent_symbol and not result:
+            result = fetch_tencent_us_quote(tencent_symbol)
+            if result:
+                print(f"[OK] 腾讯 {item['name']}: {result['close']:.2f} ({result['pct']:+.2f}%)", file=sys.stderr)
+
+        # 2. 尝试东方财富美股（个股）
+        if em_secid and not result:
+            result = fetch_em_us_quote(em_secid)
+            if result:
+                print(f"[OK] 东方财富 {item['name']}: {result['close']:.2f} ({result['pct']:+.2f}%)", file=sys.stderr)
+
+        # 3. 尝试 yfinance（备选）
+        if YFINANCE_AVAILABLE and yf_symbol and not result:
             try:
                 ticker = yf.Ticker(yf_symbol)
                 hist = ticker.history(period='2d')
@@ -511,19 +576,10 @@ def fill_us_data(data):
                         "source": "yfinance",
                     }
                     print(f"[OK] yfinance {item['name']}: {close:.2f}", file=sys.stderr)
-            except:
-                pass
-
-        # 2. 尝试新浪美股
-        if not result:
-            sina_data = fetch_sina_us_quote(sina_symbol)
-            if sina_data:
-                result = {
-                    "close": round(sina_data["close"], 2),
-                    "pct": round(sina_data["pct"], 2),
-                    "source": "sina",
-                }
-                print(f"[OK] 新浪 {item['name']}: {result['close']:.2f}", file=sys.stderr)
+            except Exception as e:
+                err_str = str(e)
+                if "RateLimit" not in err_str:
+                    print(f"[WARN] yfinance {item['name']}: {err_str[:50]}", file=sys.stderr)
 
         if result:
             item.update(result)

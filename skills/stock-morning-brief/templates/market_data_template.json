@@ -9,7 +9,8 @@
       {"name": "创业板指", "close": null, "pct": null, "change": null, "high": null, "low": null, "source": "", "need_websearch": true},
       {"name": "科创50",   "close": null, "pct": null, "change": null, "high": null, "low": null, "source": "", "need_websearch": true},
       {"name": "北证50",   "close": null, "pct": null, "change": null, "high": null, "low": null, "source": "", "need_websearch": true},
-      {"name": "上证50",   "close": null, "pct": null, "change": null, "high": null, "low": null, "source": "", "need_websearch": true}
+      {"name": "上证50",   "close": null, "pct": null, "change": null, "high": null, "low": null, "source": "", "need_websearch": true},
+      {"name": "沪深300",  "close": null, "pct": null, "change": null, "high": null, "low": null, "source": "", "need_websearch": true}
     ],
     "market_breadth": {
       "up_count": null,
@@ -66,6 +67,8 @@
     "cnh":    {"name": "离岸人民币",   "close": null, "pct": null, "source": "", "need_websearch": true}
   },
   "news_events": {
-    "need_websearch": true
+    "events": [],
+    "need_websearch": true,
+    "_rule": "仅填写近期重大国内外事件日历，如美联储主席/新主席讲话、美国CPI/PPI/非农、国内LPR/PMI/社融、重要政策会议、AI/半导体/新能源重大发布会；禁止填写指数涨跌、北向资金、板块领涨、成交额等盘面复盘。"
   }
 }

@@ -13,13 +13,29 @@ A股智能分析专家团，基于每天喂养的素材+策略，提取分析框
 ## 项目结构
 
 ```
-Agent-Skills/
+STOCK-SKILLS/
+├── config/                          # 配置文件
+│   ├── base.yaml                    #   基础配置
+│   ├── development.yaml             #   开发环境配置
+│   └── production.yaml              #   生产环境配置
 ├── knowledge-bases/                 # 方法论知识库
 │   ├── stock-methodology/           #   早报/选股方法论（核心）
 │   └── stock-samples/               #   样例数据（gitignore）
 ├── shared/                          # 共享代码模块
+│   ├── cache.py                     #   SQLite 数据缓存
+│   ├── config_loader.py             #   配置加载器
 │   ├── data_fetcher.py              #   数据获取器（AKShare / yfinance）
+│   ├── history_data.py              #   历史数据管理
+│   ├── logger.py                    #   结构化日志系统
+│   ├── scoring_backtest.py          #   评分回测模块
+│   ├── technical_indicators.py      #   技术指标计算
 │   └── utils.py                     #   工具函数（飞书推送等）
+├── tests/                           # 单元测试
+│   ├── conftest.py                  #   pytest 配置
+│   ├── test_data_fetcher.py         #   数据获取测试
+│   ├── test_scoring.py              #   评分系统测试
+│   └── test_utils.py                #   工具函数测试
+├── logs/                            # 日志文件
 └── skills/                          # 技能模块
     ├── stock-morning-brief/         #   盘前早报
     │   ├── SKILL.md                 #     技能定义
@@ -38,6 +54,53 @@ Agent-Skills/
 - Python 3.9+
 - Node.js 22+（Cloudflare 部署需要）
 - [WorkBuddy](https://www.codebuddy.cn) 桌面端
+
+
+### 配置系统
+
+项目使用 YAML 配置文件 + 环境变量覆盖的方式管理配置：
+
+```
+config/
+├── base.yaml          # 基础配置（所有环境共享）
+├── development.yaml   # 开发环境配置
+└── production.yaml    # 生产环境配置
+```
+
+通过环境变量 `STOCK_SKILLS_ENV` 切换环境（默认 `development`）：
+
+```bash
+# 开发环境
+export STOCK_SKILLS_ENV=development
+
+# 生产环境
+export STOCK_SKILLS_ENV=production
+```
+
+关键环境变量：
+
+| 变量 | 说明 |
+|------|------|
+| `STOCK_SKILLS_ENV` | 运行环境（development/production） |
+| `STOCK_SKILLS_LOG_LEVEL` | 日志级别 |
+| `FEISHU_USER_OPEN_ID` | 飞书用户 ID（推送用） |
+
+### 测试框架
+
+项目使用 pytest 进行单元测试：
+
+```bash
+# 运行所有测试
+python3 -m pytest tests/ -v
+
+# 运行单个测试文件
+python3 -m pytest tests/test_scoring.py -v
+```
+
+测试覆盖：
+- `test_data_fetcher.py` - 数据获取模块测试
+- `test_scoring.py` - 评分系统测试
+- `test_utils.py` - 工具函数测试
 
 ### 安装依赖
 

@@ -138,9 +138,9 @@ def derive_sentiment_class(data):
     breadth = data.get("yesterday", {}).get("market_breadth", {})
     indices = data.get("yesterday", {}).get("indices", [])
     
-    up_count = breadth.get("up_count", 0)
-    down_count = breadth.get("down_count", 0)
-    limit_up = breadth.get("limit_up", 0)
+    up_count = breadth.get("up_count") or 0
+    down_count = breadth.get("down_count") or 0
+    limit_up = breadth.get("limit_up") or 0
     
     total = up_count + down_count
     if total == 0:
@@ -605,6 +605,10 @@ def cmd_prepare(args):
 ## 需要你分析的字段
 
 请基于以上市场数据，输出以下 JSON 格式的分析结果。**注意：只输出 JSON，不要输出 HTML，HTML 模板由脚本自动渲染。**
+
+### 重磅事件时间线规则
+
+`market_data.news_events.events` 只允许写近期重大国内外事件日历，例如：美联储主席/新主席讲话、美国CPI/PPI/非农、国内LPR/PMI/社融、重要政策会议、AI/半导体/新能源重大发布会。禁止把指数涨跌、北向资金、板块领涨、成交额变化等盘面复盘写入重磅时间线；这些内容应放入昨日回顾、市场温度计或板块方向。若缺少可靠事件日程，必须 WebSearch 验证后补充，不得编造。
 
 ```json
 {{

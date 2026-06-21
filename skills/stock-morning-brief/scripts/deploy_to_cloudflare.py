@@ -163,12 +163,21 @@ def deploy_to_cloudflare(html_file, project_name, keep_history=True):
         print(f"[OK] 已复制: {html_file} → {latest_dest_file}", file=sys.stderr)
 
     # 6. 同步独立股票跟踪页面（如存在）
-    tracker_html = Path(__file__).resolve().parent.parent / "tmp" / "stock_tracker.html"
-    if tracker_html.exists():
+    # Primary path must match generate_report.py/stock_tracker.py default output.
+    skill_dir = Path(__file__).resolve().parent.parent
+    workspace_dir = skill_dir.parent.parent
+    tracker_candidates = [
+        skill_dir / "tmp" / "stock_tracker.html",
+        workspace_dir / "tmp" / "stock_tracker.html",
+    ]
+    tracker_html = next((p for p in tracker_candidates if p.exists()), None)
+    if tracker_html:
         tracker_dir = publish_dir / "stock-tracker"
         tracker_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(tracker_html, tracker_dir / "index.html")
         print(f"[OK] 股票跟踪页已复制: {tracker_html} → {tracker_dir / 'index.html'}", file=sys.stderr)
+    else:
+        print(f"[WARN] 未找到股票跟踪页，已检查: {', '.join(str(p) for p in tracker_candidates)}", file=sys.stderr)
 
     # 7. 执行部署命令
     print(f"\n[INFO] 部署到 Cloudflare Pages: {project_name}", file=sys.stderr)
@@ -184,7 +193,7 @@ def deploy_to_cloudflare(html_file, project_name, keep_history=True):
             ],
             capture_output=True,
             text=True,
-            timeout=120  # 2分钟超时
+            timeout=300  # Cloudflare Pages deploy can exceed 2 minutes when history is included
         )
 
         # 7. 解析部署结果
@@ -202,10 +211,11 @@ def deploy_to_cloudflare(html_file, project_name, keep_history=True):
             production_domain = CF_PAGES_DOMAIN_TEMPLATE.format(project=project_name)
             latest_url = f"{production_domain}/"
             dated_url = f"{production_domain}/{date_str}/" if keep_history else latest_url
-            tracker_url = f"{production_domain}/stock-tracker/" if tracker_html.exists() else ""
+            tracker_exists = tracker_html is not None and tracker_html.exists()
+            tracker_url = f"{production_domain}/stock-tracker/" if tracker_exists else ""
             deployment_url = f"{deployment_domain}/" if deployment_domain else ""
             deployment_dated_url = f"{deployment_domain}/{date_str}/" if deployment_domain and keep_history else deployment_url
-            deployment_tracker_url = f"{deployment_domain}/stock-tracker/" if deployment_domain and tracker_html.exists() else ""
+            deployment_tracker_url = f"{deployment_domain}/stock-tracker/" if deployment_domain and tracker_exists else ""
             public_url = latest_url
 
             print(f"[URL] 最新报告: {latest_url}", file=sys.stderr)
@@ -244,7 +254,7 @@ def deploy_to_cloudflare(html_file, project_name, keep_history=True):
             }
 
     except subprocess.TimeoutExpired:
-        print(f"[ERROR] 部署超时（>120秒）", file=sys.stderr)
+        print(f"[ERROR] 部署超时（>300秒）", file=sys.stderr)
         return {
             "success": False,
             "url": "",

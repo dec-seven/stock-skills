@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A股收盘复盘 - {{DATE}}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #0a1628; color: #e0e6f0; min-height: 100vh; }
+
+  .header { background: linear-gradient(135deg, #1a2a4a 0%, #0d1f3c 100%); padding: 20px 30px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1e3a5f; }
+  .header h1 { font-size: 20px; color: #5cf; }
+  .header .subtitle { font-size: 13px; color: #8fa4c0; margin-top: 4px; }
+  .header a { color: #5cf; text-decoration: none; font-size: 13px; }
+  .header a:hover { text-decoration: underline; }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+  .section { background: #111f35; border-radius: 10px; padding: 20px; margin-bottom: 20px; border: 1px solid #1e3a5f; }
+  .section-title { font-size: 16px; font-weight: 700; color: #5cf; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #1e3a5f; display: flex; align-items: center; gap: 8px; }
+  .section-title .icon { font-size: 18px; }
+
+  /* 市场复盘 */
+  .market-review { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .index-card { background: #0d1f3c; border-radius: 8px; padding: 14px; border: 1px solid #1e3a5f; }
+  .index-card .name { font-size: 13px; color: #8fa4c0; }
+  .index-card .price { font-size: 22px; font-weight: 700; margin: 6px 0 4px; }
+  .index-card .price.up { color: #ff4444; }
+  .index-card .price.down { color: #00cc00; }
+  .index-card .change { font-size: 14px; }
+  .index-card .change.up { color: #ff6666; }
+  .index-card .change.down { color: #00dd00; }
+  .index-card .prediction { font-size: 12px; color: #8fa4c0; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #1e3a5f; }
+  .index-card .prediction .label { color: #6a8fbf; }
+
+  /* 早报预测 vs 实际 */
+  .vs-table { width: 100%; border-collapse: collapse; }
+  .vs-table th { background: #0d1f3c; color: #5cf; padding: 10px 12px; text-align: left; font-size: 13px; border-bottom: 2px solid #1e3a5f; }
+  .vs-table td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #1a2a4a; vertical-align: top; }
+  .vs-table tr:hover { background: #0d1f3c; }
+  .vs-table .correct { color: #00dd00; }
+  .vs-table .wrong { color: #ff4444; }
+  .vs-table .partial { color: #ffaa00; }
+
+  /* 评分 */
+  .score-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+  .score-badge.good { background: rgba(0,200,80,0.15); color: #00dd00; }
+  .score-badge.mid { background: rgba(255,170,0,0.15); color: #ffaa00; }
+  .score-badge.bad { background: rgba(255,60,60,0.15); color: #ff4444; }
+
+  /* 选股复盘 */
+  .stock-review-card { background: #0d1f3c; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid #1e3a5f; }
+  .stock-review-card .stock-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .stock-review-card .stock-name { font-size: 16px; font-weight: 700; color: #e0e6f0; }
+  .stock-review-card .stock-code { font-size: 12px; color: #8fa4c0; }
+  .stock-review-card .actual-pct { font-size: 18px; font-weight: 700; margin-left: auto; }
+  .stock-review-card .actual-pct.up { color: #ff4444; }
+  .stock-review-card .actual-pct.down { color: #00cc00; }
+  .stock-review-card .prediction-score { font-size: 12px; color: #8fa4c0; }
+  .stock-review-card .verdict { font-size: 13px; margin-top: 8px; padding: 8px; border-radius: 6px; }
+  .stock-review-card .verdict.correct { background: rgba(0,200,80,0.1); color: #00dd00; border: 1px solid rgba(0,200,80,0.2); }
+  .stock-review-card .verdict.wrong { background: rgba(255,60,60,0.1); color: #ff4444; border: 1px solid rgba(255,60,60,0.2); }
+  .stock-review-card .verdict.partial { background: rgba(255,170,0,0.1); color: #ffaa00; border: 1px solid rgba(255,170,0,0.2); }
+
+  /* 方法论进化 */
+  .evolution-box { background: #0d1f3c; border-radius: 8px; padding: 16px; border: 1px solid #1e3a5f; }
+  .evolution-item { padding: 10px 0; border-bottom: 1px solid #1a2a4a; }
+  .evolution-item:last-child { border-bottom: none; }
+  .evolution-item .type { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 6px; }
+  .evolution-item .type.reinforce { background: rgba(0,200,80,0.15); color: #00dd00; }
+  .evolution-item .type.adjust { background: rgba(255,170,0,0.15); color: #ffaa00; }
+  .evolution-item .type.new { background: rgba(92,255,255,0.15); color: #5cf; }
+  .evolution-item .content { font-size: 13px; color: #c0d0e0; line-height: 1.6; }
+
+  /* 总结 */
+  .summary-box { background: linear-gradient(135deg, #0d1f3c 0%, #111f35 100%); border-radius: 8px; padding: 16px; border: 1px solid #1e3a5f; }
+  .summary-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+  .summary-row .label { color: #8fa4c0; }
+  .summary-row .value { font-weight: 600; }
+  .summary-row .value.up { color: #ff4444; }
+  .summary-row .value.down { color: #00cc00; }
+
+  .footer { text-align: center; padding: 20px; color: #4a6080; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📊 A股收盘复盘</h1>
+    <div class="subtitle">{{DATE}} 收盘后复盘分析 · 对比早报预测</div>
+  </div>
+  <a href="/">← 返回早盘报告</a>
+</div>
+
+<div class="container">
+
+  <!-- Section 1: 市场实际 vs 早报预测 -->
+  <div class="section">
+    <div class="section-title"><span class="icon">📈</span> 市场复盘：预测 vs 实际</div>
+    <div class="market-review">
+      {{MARKET_INDEX_CARDS}}
+    </div>
+  </div>
+
+  <!-- Section 2: 早报方向判断复盘 -->
+  <div class="section">
+    <div class="section-title"><span class="icon">🎯</span> 早报预测复盘</div>
+    {{PREDICTION_VS_ACTUAL}}
+  </div>
+
+  <!-- Section 3: 选股复盘 -->
+  <div class="section">
+    <div class="section-title"><span class="icon">📋</span> 选股复盘（早报推荐 vs 实际表现）</div>
+    {{STOCK_REVIEW}}
+  </div>
+
+  <!-- Section 4: 做对/做错的地方（由 Agent 动态生成） -->
+  <div class="section">
+    <div class="section-title"><span class="icon">✅❌</span> 分析对错总结</div>
+    <div id="accuracy-summary-content">
+      {{ACCURACY_SUMMARY}}
+    </div>
+  </div>
+
+  <!-- Section 5: 方法论进化建议（由 Agent 动态生成） -->
+  <div class="section">
+    <div class="section-title"><span class="icon">🧬</span> 方法论进化建议</div>
+    <div class="evolution-box" id="evolution-content">
+      {{EVOLUTION_SUGGESTIONS}}
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">StockWise 收盘复盘 · 每日 17:00 自动生成</div>
+
+</body>
+</html>

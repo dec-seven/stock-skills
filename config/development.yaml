@@ -1,0 +1,12 @@
+# 开发环境配置
+extends: base
+
+logging:
+  level: "DEBUG"
+  console: true
+
+cache:
+  enabled: false
+
+feishu:
+  push_enabled: false

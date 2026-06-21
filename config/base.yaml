@@ -1,0 +1,84 @@
+# 基础配置
+project:
+  name: "stock-skills"
+  version: "1.0.0"
+
+# 数据源配置
+data_sources:
+  domestic:
+    primary: "akshare"
+    fallback: "websearch"
+  overseas:
+    primary: "yfinance"
+    fallback: "websearch"
+
+# 指数映射
+indices:
+  a_share:
+    - name: "上证指数"
+      code: "000001"
+      prefix: "sh"
+    - name: "深证成指"
+      code: "399001"
+      prefix: "sz"
+    - name: "创业板指"
+      code: "399006"
+      prefix: "sz"
+    - name: "科创50"
+      code: "000688"
+      prefix: "sh"
+    - name: "北证50"
+      code: "899050"
+      prefix: "bj"
+    - name: "沪深300"
+      code: "000300"
+      prefix: "sh"
+    - name: "上证50"
+      code: "000016"
+      prefix: "sh"
+
+# 评分权重
+scoring:
+  fundamental:
+    max_score: 80
+    dimensions:
+      业务纯正度: 10
+      行业地位: 10
+      涨价受益度: 10
+      业绩验证: 10
+      催化剂临近: 10
+      估值位置: 10
+      特殊标签加分: 10
+  technical:
+    max_score: 30
+    indicators:
+      MACD: 8
+      KDJ: 7
+      成交量趋势: 6
+      均线系统: 5
+      支撑压力位: 4
+  rating:
+    - min: 85
+      rating: "强烈推荐"
+      stars: 5
+    - min: 75
+      rating: "推荐"
+      stars: 4
+    - min: 60
+      rating: "一般观察"
+      stars: 3
+    - min: 0
+      rating: "不建议"
+      stars: 2
+
+# 日志配置
+logging:
+  level: "INFO"
+  format: "json"
+  dir: "logs"
+
+# 缓存配置
+cache:
+  enabled: true
+  ttl: 3600
+  dir: "data/cache"

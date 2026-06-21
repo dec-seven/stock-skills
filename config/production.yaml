@@ -1,0 +1,13 @@
+# 生产环境配置
+extends: base
+
+logging:
+  level: "INFO"
+  console: false
+
+cache:
+  enabled: true
+  ttl: 3600
+
+feishu:
+  push_enabled: true

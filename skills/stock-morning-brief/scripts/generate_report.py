@@ -18,9 +18,37 @@ import tempfile
 from datetime import datetime, timedelta
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SKILL_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+WORKSPACE_DIR = os.path.abspath(os.path.join(SKILL_DIR, "..", ".."))
 TEMPLATE_PATH = os.path.join(SCRIPT_DIR, "..", "templates", "report_template.html")
 
-# 飞书推送配置
+
+def load_env_file(path):
+    """加载本地 .env 文件；仅填充当前进程未设置的环境变量。"""
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except Exception as e:
+        print(f"[WARN] 加载环境变量文件失败 {path}: {e}", file=sys.stderr)
+
+
+# 飞书推送配置：优先系统环境变量，其次读取 workspace/skill 本地 .env（已 gitignore）
+for env_path in [
+    os.path.join(WORKSPACE_DIR, ".env"),
+    os.path.join(SKILL_DIR, ".env"),
+]:
+    load_env_file(env_path)
+
 FEISHU_USER_OPEN_ID = os.environ.get("FEISHU_USER_OPEN_ID")
 if not FEISHU_USER_OPEN_ID:
     print("[WARN] FEISHU_USER_OPEN_ID 未设置，飞书推送功能将被禁用", file=sys.stderr)
@@ -106,6 +134,56 @@ def pct_class(pct):
     return "up" if pct >= 0 else "down"
 
 
+def us_reason_fallback(key, item, us_data):
+    """为隔夜美股/大宗品种生成关键信息兜底，禁止表格出现空白原因。"""
+    reason = (item or {}).get("reason")
+    if reason:
+        return reason
+
+    pct = (item or {}).get("pct")
+    sox_pct = (us_data.get("sox") or {}).get("pct")
+    nvda_pct = (us_data.get("nvda") or {}).get("pct")
+    vix_pct = (us_data.get("vix") or {}).get("pct")
+    oil_pct = (us_data.get("oil") or {}).get("pct")
+    gold_pct = (us_data.get("gold") or {}).get("pct")
+
+    if key == "dow":
+        if isinstance(pct, (int, float)) and pct > 0:
+            return "传统蓝筹相对抗跌，对A股权重情绪有支撑，但需结合纳指与半导体表现判断成长线压力。"
+        return "传统蓝筹走弱，外部风险偏好偏谨慎，对A股权重板块形成扰动。"
+    if key == "sp500":
+        if isinstance(pct, (int, float)) and pct < 0:
+            return "宽基指数回落，说明美股风险偏好降温，对A股早盘情绪偏压制。"
+        return "宽基指数上涨，外部风险偏好改善，对A股整体情绪偏友好。"
+    if key == "nasdaq":
+        parts = []
+        if isinstance(sox_pct, (int, float)):
+            parts.append(f"费城半导体{format_pct(sox_pct)}")
+        if isinstance(nvda_pct, (int, float)):
+            parts.append(f"英伟达{format_pct(nvda_pct)}")
+        detail = "、".join(parts)
+        if isinstance(pct, (int, float)) and pct < 0:
+            return f"科技成长承压{('，' + detail) if detail else ''}，对A股AI硬件、半导体链形成短线压制。"
+        return f"科技成长反弹{('，' + detail) if detail else ''}，有利于A股AI与半导体链情绪修复。"
+    if key == "vix":
+        if isinstance(vix_pct, (int, float)) and vix_pct > 0:
+            return "避险波动抬升，提示外盘扰动增强。"
+        return "波动率回落，系统性风险压力有限。"
+    if key == "sox":
+        return "A股半导体、AI硬件链的重要映射指标，跌幅扩大时需防高位科技股兑现。"
+    if key == "nvda":
+        return "AI算力链核心锚，影响A股CPO、PCB、服务器和半导体情绪。"
+    if key == "oil":
+        if isinstance(oil_pct, (int, float)) and oil_pct < 0:
+            return "油价回落缓和通胀预期，但也提示全球需求预期偏弱。"
+        return "油价上涨强化通胀和资源品线索，关注能源化工链传导。"
+    if key == "gold":
+        if isinstance(gold_pct, (int, float)) and gold_pct > 0:
+            return "黄金走强说明避险需求仍在，关注贵金属与风险偏好的跷跷板。"
+        return "黄金回落说明避险降温，对风险资产情绪相对友好。"
+    return "需结合涨跌幅、美元、油价和半导体链同步判断对A股的传导。"
+
+
 # ==================== 动态生成 HTML 片段 ====================
 
 def build_us_cards_html(us_data):
@@ -123,7 +201,7 @@ def build_us_cards_html(us_data):
         item = us_data.get(key, {})
         close = item.get("close")
         pct = item.get("pct")
-        reason = item.get("reason", "")
+        reason = us_reason_fallback(key, item, us_data)
         
         if close is not None and not item.get("need_websearch"):
             cls = pct_class(pct)
@@ -160,7 +238,7 @@ def build_us_table_html(us_data):
         item = us_data.get(key, {})
         close = item.get("close")
         pct = item.get("pct")
-        info = item.get("reason", "")
+        info = us_reason_fallback(key, item, us_data)
         
         if close is not None and not item.get("need_websearch"):
             cls = pct_class(pct)
@@ -193,7 +271,7 @@ def build_us_extended_grid_html(us_data):
         item = us_data.get(key, {})
         close = item.get("close")
         pct = item.get("pct")
-        reason = item.get("reason", "")
+        reason = us_reason_fallback(key, item, us_data)
         if close is not None and not item.get("need_websearch"):
             cls = pct_class(pct)
             close_str = f"{close:,.2f}" if close < 1000 else f"{close:,.0f}"
@@ -311,14 +389,26 @@ def build_a_review_table_html(data):
     top_gainers = sectors.get("top_gainers", [])
     top_losers = sectors.get("top_losers", [])
     
+    def _format_sector_items(items):
+        formatted = []
+        for s in items[:3]:
+            if "name" not in s:
+                continue
+            pct = s.get("pct")
+            if isinstance(pct, (int, float)):
+                formatted.append(f'{s["name"]}({pct:+.2f}%)')
+            else:
+                formatted.append(f'{s["name"]}(—)')
+        return "、".join(formatted)
+
     if top_gainers and len(top_gainers) > 0 and not top_gainers[0].get("need_websearch"):
-        top_str = "、".join([f'{s["name"]}({s["pct"]:+.2f}%)' for s in top_gainers[:3] if "name" in s])
+        top_str = _format_sector_items(top_gainers)
         rows += f'<tr><td>领涨板块</td><td colspan="2">{top_str}</td></tr>'
     else:
         rows += f'<tr><td>领涨板块</td><td colspan="2">—</td></tr>'
     
     if top_losers and len(top_losers) > 0 and not top_losers[0].get("need_websearch"):
-        bottom_str = "、".join([f'{s["name"]}({s["pct"]:+.2f}%)' for s in top_losers[:3] if "name" in s])
+        bottom_str = _format_sector_items(top_losers)
         rows += f'<tr><td>领跌板块</td><td colspan="2">{bottom_str}</td></tr>'
     else:
         rows += f'<tr><td>领跌板块</td><td colspan="2">—</td></tr>'
@@ -372,19 +462,26 @@ def build_today_prediction_table_html(ai_texts):
 
 
 def build_event_timeline_html(data):
-    """生成近期重磅事件时间线 HTML——支持结构化数据（含日期）"""
+    """生成近期重磅事件时间线 HTML——支持结构化数据（含日期/时间/影响），禁止空时间线。"""
     news_events = data.get("news_events", {})
-    
-    # 优先使用结构化事件数据（含 date/tag/text/css_class）
     items = news_events.get("events", [])
+
+    if not items:
+        items = build_event_fallbacks(data)
+
     if items and isinstance(items[0], dict):
         timeline_html = '<div class="timeline">\n'
-        for item in items:
-            css_class = item.get("css_class", "done")
-            item_date = item.get("date", "")
-            text = item.get("text", "")
+        for i, item in enumerate(items):
+            css_class = item.get("css_class") or ("done" if i % 3 == 0 else ("bullish" if i % 3 == 1 else "bearish"))
+            item_date = item.get("date") or item.get("time") or "待确认"
+            text = item.get("text") or item.get("title") or ""
+            impact = item.get("impact") or ""
+            if impact:
+                text = f"{text}：{impact}" if text else impact
+            if not text:
+                continue
             tag_html = ""
-            tag = item.get("tag", "")
+            tag = item.get("tag") or item.get("level") or ""
             if tag:
                 tag_html = f'<span class="timeline-tag {css_class}">{tag}</span>'
             timeline_html += f'    <div class="timeline-item {css_class}">\n'
@@ -393,19 +490,33 @@ def build_event_timeline_html(data):
             timeline_html += f'    </div>\n'
         timeline_html += '</div>'
         return timeline_html
-    
-    # 回退：纯字符串列表（无日期）
+
     if items:
         timeline_html = '<div class="timeline">\n'
         for i, item in enumerate(items):
             css_class = "done" if i % 3 == 0 else ("bullish" if i % 3 == 1 else "bearish")
             timeline_html += f'    <div class="timeline-item {css_class}">\n'
+            timeline_html += f'        <div class="timeline-date">重点</div>\n'
             timeline_html += f'        <div class="timeline-text">{item}</div>\n'
             timeline_html += f'    </div>\n'
         timeline_html += '</div>'
         return timeline_html
-    
-    return '<div class="timeline"><div class="timeline-item"><span class="timeline-text">暂无重大事件</span></div></div>'
+
+    return '<div class="timeline"><div class="timeline-item bearish"><div class="timeline-date">待补充</div><div class="timeline-text">重大事件数据缺失，请优先补齐国内外对A股影响最大的事件。</div></div></div>'
+
+
+def build_event_fallbacks(data):
+    """当 news_events 缺失时，生成重大事件日历兜底，而不是盘面分析事件。"""
+    report_date = data.get("report_date", "") or "今日"
+    return [
+        {
+            "date": report_date,
+            "text": "重磅事件日历待补齐",
+            "impact": "该模块只写近期重大国内外事件，如美联储主席/新主席讲话、美国CPI/PPI/非农、国内LPR/PMI/社融、重要政策会议、AI/半导体/新能源重大发布会；禁止用指数涨跌、北向资金、板块涨跌、成交额等盘面复盘替代。",
+            "tag": "需补充",
+            "css_class": "bearish",
+        }
+    ]
 
 
 # ==================== 模板填充 ====================
@@ -550,8 +661,10 @@ def update_stock_tracker(args, data):
         print("[WARN] 未找到 llm_analysis.json，跳过股票跟踪更新", file=sys.stderr)
         return
 
-    tracker_json = args.stock_tracker_json or os.path.join(SCRIPT_DIR, "..", "data", "stock_selection_tracker.json")
-    tracker_html = args.stock_tracker_html or os.path.join(SCRIPT_DIR, "..", "tmp", "stock_tracker.html")
+    tracker_json = args.stock_tracker_json or os.path.join(SKILL_DIR, "data", "stock_selection_tracker.json")
+    # deploy_to_cloudflare.py publishes SKILL_DIR/tmp/stock_tracker.html.
+    # Keep the default tracker HTML in the same location to avoid deploying stale pages.
+    tracker_html = args.stock_tracker_html or os.path.join(SKILL_DIR, "tmp", "stock_tracker.html")
     tracker_script = os.path.join(SCRIPT_DIR, "stock_tracker.py")
 
     cmd = [
@@ -564,8 +677,21 @@ def update_stock_tracker(args, data):
         "--tracker", tracker_json,
         "--html", tracker_html,
     ]
+    env = os.environ.copy()
+    if env.get("MARKET_DATA_USE_PROXY", "0") != "1":
+        for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+            env.pop(key, None)
+        no_proxy_hosts = ["push2his.eastmoney.com", "push2.eastmoney.com", "qt.gtimg.cn", "ifzq.gtimg.cn"]
+        existing = env.get("NO_PROXY") or env.get("no_proxy") or ""
+        merged = [item.strip() for item in existing.split(",") if item.strip()]
+        for host in no_proxy_hosts:
+            if host not in merged:
+                merged.append(host)
+        env["NO_PROXY"] = ",".join(merged)
+        env["no_proxy"] = env["NO_PROXY"]
+
     try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=90)
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=90, env=env)
         print(f"[OK] 股票跟踪已更新: {tracker_json}", file=sys.stderr)
         if result.stdout.strip():
             print(result.stdout.strip(), file=sys.stderr)
@@ -610,16 +736,21 @@ def push_to_feishu(html_path, data, cloudflare_url=None):
         close = sh_index.get("close", 0)
         pct = sh_index.get("pct", 0)
         turnover = data.get("yesterday", {}).get("turnover", {}).get("total", 0)
-        north = data.get("yesterday", {}).get("north_bound", {}).get("net_inflow", 0)
+        north = data.get("yesterday", {}).get("north_bound", {}).get("net_inflow")
         breadth = data.get("yesterday", {}).get("market_breadth", {})
         up_count = breadth.get("up_count", 0)
+        down_count = breadth.get("down_count", 0)
         limit_up = breadth.get("limit_up", 0)
         
         lines.append("**📈 核心数据**")
         lines.append(f"- 上证指数：{close:.2f} ({pct:+.2f}%)")
         lines.append(f"- 两市成交：{turnover:.0f}亿")
-        lines.append(f"- 北向资金：净流入{north:.1f}亿")
-        lines.append(f"- 涨跌家数：{up_count}涨 / 涨停{limit_up}只")
+        if isinstance(north, (int, float)):
+            direction = "净流入" if north >= 0 else "净流出"
+            lines.append(f"- 北向资金：{direction}{abs(north):.1f}亿")
+        else:
+            lines.append("- 北向资金：未披露")
+        lines.append(f"- 涨跌家数：{up_count}涨 / {down_count}跌 / 涨停{limit_up}只")
         lines.append("")
     
     # 3. 市场定调（从analysis）
@@ -635,7 +766,9 @@ def push_to_feishu(html_path, data, cloudflare_url=None):
     if sectors:
         lines.append("**🔥 领涨板块**")
         for s in sectors:
-            lines.append(f"- {s['name']} ({s['pct']:+.2f}%)")
+            pct = s.get("pct")
+            pct_text = f"{pct:+.2f}%" if isinstance(pct, (int, float)) else "—"
+            lines.append(f"- {s['name']} ({pct_text})")
         lines.append("")
     
     # 5. 选股摘要（从analysis）
@@ -665,7 +798,7 @@ def push_to_feishu(html_path, data, cloudflare_url=None):
         subprocess.run(
             [LARK_CLI, "im", "+messages-send",
              "--user-id", FEISHU_USER_OPEN_ID,
-             "--text", markdown, "--as", "bot"],
+             "--markdown", markdown, "--as", "bot"],
             check=True, timeout=30, capture_output=True,
             env=env,
         )
@@ -742,7 +875,7 @@ def main():
                 check=True,
                 capture_output=True,
                 text=True,
-                timeout=180,
+                timeout=360,
             )
             combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
             json_match = re.search(r'\{[^\n]*"cloudflare_url"[^\n]*\}', combined_output)

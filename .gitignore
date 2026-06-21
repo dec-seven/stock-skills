@@ -33,3 +33,19 @@ __pycache__/
 # macOS
 .DS_Store
 
+
+# 运行时数据目录
+data/
+logs/
+
+# 生成的报告文件
+*.html
+!skills/**/templates/*.html
+
+# 临时测试文件
+test_*.py
+tui_app.py
+requirements-tui.txt
+*.md.bak
+早报_*.md
+xhs_*.md
