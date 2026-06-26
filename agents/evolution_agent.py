@@ -1,10 +1,11 @@
 """
-Learning Agent：从新资料中学习方法论，更新知识库与记忆。
+Evolution Agent：策略进化引擎，从复盘中提炼方法论，持续优化知识库。
 
 职责：
-- 学习新资料（盘前策略/选股逻辑/复盘报告/用户反馈）
-- 提炼核心方法论、关键模式、市场状态识别规则
-- 更新 knowledge-bases/ 和 .workbuddy/memory/
+- 分析复盘报告，提炼可复用的分析方法
+- 识别市场规律、关键模式、风险控制规则
+- 自动更新知识库版本，沉淀策略经验
+- 驱动系统自我进化，提升分析能力
 
 输入：
 {
@@ -37,11 +38,11 @@ from .base import BaseAgent, AgentResult, Tool, ToolResult
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
-class LearningAgent(BaseAgent):
-    """学习方法论的 Agent"""
+class EvolutionAgent(BaseAgent):
+    """策略进化 Agent"""
 
-    name = "learning_agent"
-    description = "从盘前策略、选股逻辑、复盘中学习方法论，更新知识库"
+    name = "evolution_agent"
+    description = "策略进化：从复盘中提炼方法论，持续优化知识库"
 
     # 知识库路径
     KB_DIR = os.path.join(PROJECT_ROOT, "knowledge-bases", "stock-methodology")
@@ -51,10 +52,10 @@ class LearningAgent(BaseAgent):
     LEARNING_LOG = os.path.join(KB_DIR, "learning_log.json")
 
     def run(self, input_data: dict) -> AgentResult:
-        """执行学习流程
+        """执行进化流程
 
         流程：
-        1. 检查是否已学习过（防重复）
+        1. 检查是否已处理过（防重复）
         2. 提炼核心方法论（使用 LLM 或规则提取）
         3. 判断更新目标文件（早报指南 vs 选股指南 vs 两者）
         4. 合并到知识库（不覆盖，只增量）
@@ -197,7 +198,7 @@ class LearningAgent(BaseAgent):
             if json_match:
                 return json.loads(json_match.group())
         except Exception as e:
-            print(f"[LearningAgent] LLM 提取失败: {e}")
+            print(f"[EvolutionAgent] LLM 提取失败: {e}")
 
         # 失败时回退到规则提取
         return self._rule_extract(content, source_type)
@@ -327,7 +328,7 @@ class LearningAgent(BaseAgent):
                                 "change": change_summary
                             })
             except Exception as e:
-                print(f"[LearningAgent] 更新 {filepath} 失败: {e}")
+                print(f"[EvolutionAgent] 更新 {filepath} 失败: {e}")
 
         return updates
 

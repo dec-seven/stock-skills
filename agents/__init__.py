@@ -12,9 +12,8 @@ from .base import BaseAgent, AgentResult, Tool, ToolResult
 from .macro_agent import MacroAgent
 from .sector_agent import SectorAgent
 from .stock_agent import StockAgent
-from .review_agent import ReviewAgent
 from .risk_manager_agent import RiskManagerAgent
-from .learning_agent import LearningAgent
+from .evolution_agent import EvolutionAgent
 
 __all__ = [
     "BaseAgent",
@@ -24,7 +23,6 @@ __all__ = [
     "MacroAgent",
     "SectorAgent",
     "StockAgent",
-    "ReviewAgent",
     "RiskManagerAgent",
-    "LearningAgent",
+    "EvolutionAgent",
 ]

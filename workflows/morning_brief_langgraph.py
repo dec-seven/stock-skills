@@ -40,9 +40,8 @@ from agents.base import BaseAgent, AgentResult
 from agents.macro_agent import MacroAgent
 from agents.sector_agent import SectorAgent
 from agents.stock_agent import StockAgent
-from agents.review_agent import ReviewAgent
 from agents.risk_manager_agent import RiskManagerAgent
-from agents.learning_agent import LearningAgent
+from agents.evolution_agent import EvolutionAgent
 from agents.event_agent import EventAgent
 from shared.ai.llm_client import LLMClient
 from shared.ai.tools import build_default_tools
@@ -52,7 +51,7 @@ from shared.ai.fact_guard import validate_macro_output
 DEFAULT_WORK_DIR = os.path.join(PROJECT_ROOT, "skills", "stock-morning-brief", "tmp")
 
 # 状态机步骤
-STEPS = ["fetch", "event", "macro", "sector", "stock", "risk_manager", "review", "compile", "render", "deploy", "push", "learn"]
+STEPS = ["fetch", "event", "macro", "sector", "stock", "risk_manager", "compile", "render", "deploy", "push", "evolve"]
 
 
 def merge_dicts(left: Dict, right: Dict) -> Dict:
@@ -88,7 +87,6 @@ class MorningBriefState(TypedDict):
     sector_result: Annotated[Dict[str, Any], merge_dicts]
     stock_result: Annotated[Dict[str, Any], merge_dicts]
     risk_manager_result: Annotated[Dict[str, Any], merge_dicts]
-    review_result: Annotated[Dict[str, Any], merge_dicts]
     
     # 步骤结果
     steps: Annotated[Dict[str, Dict], merge_dicts]
@@ -141,9 +139,8 @@ def create_initial_state(work_dir: str, llm_client: LLMClient = None, skip_deplo
         "macro": MacroAgent(llm_client=llm, tools=tools, run_id=run_id),
         "sector": SectorAgent(llm_client=llm, tools=tools, run_id=run_id),
         "stock": StockAgent(llm_client=llm, tools=tools, run_id=run_id),
-        "review": ReviewAgent(llm_client=llm, tools=tools, run_id=run_id),
         "risk_manager": RiskManagerAgent(llm_client=llm, tools=tools, run_id=run_id),
-        "learning": LearningAgent(llm_client=llm, tools=tools, run_id=run_id),
+        "evolution": EvolutionAgent(llm_client=llm, tools=tools, run_id=run_id),
     }
     
     return MorningBriefState(
@@ -335,32 +332,14 @@ def node_risk_manager(state: MorningBriefState) -> Dict:
     return {
         "risk_manager_result": risk_res.data if risk_res.success else {},
         "steps": {"risk_manager": {"success": risk_res.success, "errors": risk_res.errors}},
-        "current_step": "review",
-    }
-
-
-def node_review(state: MorningBriefState) -> Dict:
-    """运行 review Agent"""
-    print("\n[7/12] 运行 review Agent...")
-    
-    review_res = state["agents"]["review"].run({
-        "market_data": state["market_data"],
-        "macro_result": state["macro_result"],
-        "sector_result": state["sector_result"],
-        "stock_result": state["stock_result"],
-        "work_dir": state["work_dir"],
-    })
-    
-    return {
-        "review_result": review_res.data if review_res.success else {},
-        "steps": {"review": {"success": review_res.success, "errors": review_res.errors}},
         "current_step": "compile",
     }
 
 
+
 def node_compile(state: MorningBriefState) -> Dict:
     """编译 ai_texts.json"""
-    print("\n[8/12] 编译 ai_texts.json...")
+    print("\n[7/10] 编译 ai_texts.json...")
     
     # 在线模式：合并 Agent 输出
     if state["llm"].is_online():
@@ -421,7 +400,7 @@ def _offline_compile(state: MorningBriefState) -> Dict:
 
 def node_render(state: MorningBriefState) -> Dict:
     """渲染 HTML 报告"""
-    print("\n[9/12] 渲染 HTML 报告...")
+    print("\n[8/10] 渲染 HTML 报告...")
     
     r = state["tools"]["render_report"].execute(
         data_path=state["market_data_path"],
@@ -445,7 +424,7 @@ def node_deploy(state: MorningBriefState) -> Dict:
         print("\n[10/12] 跳过部署")
         return {"current_step": "push"}
     
-    print("\n[10/12] 部署 Cloudflare...")
+    print("\n[9/10] 部署 Cloudflare...")
     
     r = state["tools"]["deploy_cloudflare"].execute(html_path=state["html_path"])
     
@@ -467,7 +446,7 @@ def node_push(state: MorningBriefState) -> Dict:
         print("\n[11/12] 跳过推送")
         return {"current_step": "learn"}
     
-    print("\n[11/12] 飞书推送...")
+    print("\n[10/10] 飞书推送...")
     
     r = state["tools"]["push_feishu"].execute(
         data_path=state["market_data_path"],
@@ -482,9 +461,9 @@ def node_push(state: MorningBriefState) -> Dict:
     }
 
 
-def node_learn(state: MorningBriefState) -> Dict:
-    """学习本次报告中的方法论"""
-    print("\n[12/12] 运行 Learning Agent...")
+def node_evolve(state: MorningBriefState) -> Dict:
+    """策略进化：提炼方法论，更新知识库"""
+    print("\n[10/10] 运行 Evolution Agent...")
     
     # 读取 ai_texts.json
     ai_texts = {}
@@ -493,7 +472,7 @@ def node_learn(state: MorningBriefState) -> Dict:
             ai_texts = json.load(f)
     except Exception:
         return {
-            "steps": {"learn": {"success": False, "error": "ai_texts.json 不存在"}},
+            "steps": {"evolve": {"success": False, "error": "ai_texts.json 不存在"}},
             "current_step": "END",
             "success": True,  # learn 失败不影响整体
         }
@@ -521,7 +500,7 @@ def node_learn(state: MorningBriefState) -> Dict:
     
     learning_content = "\n\n".join(parts)
     
-    learn_res = state["agents"]["learning"].run({
+    learn_res = state["agents"]["evolution"].run({
         "source_type": "review",
         "source_date": datetime.now().strftime("%Y-%m-%d"),
         "source_title": f"早报自动复盘 {datetime.now().strftime('%Y-%m-%d')}",
@@ -586,12 +565,11 @@ def build_graph() -> StateGraph:
     graph.add_node("agents_parallel", node_agents_parallel)
     graph.add_node("stock", node_stock)
     graph.add_node("risk_manager", node_risk_manager)
-    graph.add_node("review", node_review)
     graph.add_node("compile", node_compile)
     graph.add_node("render", node_render)
     graph.add_node("deploy", node_deploy)
     graph.add_node("push", node_push)
-    graph.add_node("learn", node_learn)
+    graph.add_node("evolve", node_evolve)
     
     # 添加边
     graph.add_edge(START, "fetch")
@@ -612,10 +590,6 @@ def build_graph() -> StateGraph:
         END: END,
     })
     graph.add_conditional_edges("risk_manager", route_generic, {
-        "review": "review",
-        END: END,
-    })
-    graph.add_conditional_edges("review", route_generic, {
         "compile": "compile",
         END: END,
     })
@@ -628,8 +602,8 @@ def build_graph() -> StateGraph:
         END: END,
     })
     graph.add_edge("deploy", "push")
-    graph.add_edge("push", "learn")
-    graph.add_edge("learn", END)
+    graph.add_edge("push", "evolve")
+    graph.add_edge("evolve", END)
     
     return graph
 
