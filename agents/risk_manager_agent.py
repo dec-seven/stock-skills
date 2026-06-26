@@ -54,7 +54,7 @@ class RiskManagerAgent(BaseAgent):
 - 创业板: {cyb.get('close', 'N/A')} ({cyb.get('pct', 'N/A')}%)
 
 ### 涨跌家数
-- 上涨: {breadth.get('advancing', 'N/A')} 下跌: {breadth.get('declining', 'N/A')}
+- 上涨: {breadth.get('up_count', breadth.get('advancing', 'N/A'))} 下跌: {breadth.get('down_count', breadth.get('declining', 'N/A'))}
 - 涨停: {breadth.get('limit_up', 'N/A')} 跌停: {breadth.get('limit_down', 'N/A')}
 
 ### 成交额

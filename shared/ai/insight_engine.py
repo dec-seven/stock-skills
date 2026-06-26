@@ -173,14 +173,14 @@ def derive_sentiment_class(data: Dict) -> str:
     pcts = [idx.get("pct", 0) for idx in indices if "pct" in idx and not idx.get("need_websearch")]
     avg_pct = sum(pcts) / len(pcts) if pcts else 0
     
-    # 高涨:大涨+涨停潮
-    if avg_pct > 2.0 and limit_up > 150:
+    # 高涨:大涨或涨停潮
+    if (avg_pct > 1.5 and limit_up > 100) or limit_up > 150:
         sentiment = "sentiment-hot"
-    # 温和:温和上涨
-    elif avg_pct > 0.3 and up_ratio > 0.55:
+    # 温和:温和上涨或涨多跌少
+    elif (avg_pct > 0.3 and up_ratio > 0.55) or (avg_pct > 0.5 and limit_up > 50):
         sentiment = "sentiment-warm"
-    # 寒冷:下跌调整
-    elif avg_pct < -0.5 or up_ratio < 0.4:
+    # 寒冷:下跌调整或跌多涨少
+    elif avg_pct < -0.5 or (up_ratio < 0.3 and limit_up < 50):
         sentiment = "sentiment-cold"
     # 极寒:暴跌
     elif avg_pct < -2.0 and up_ratio < 0.2:

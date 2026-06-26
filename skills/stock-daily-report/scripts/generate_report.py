@@ -438,7 +438,7 @@ def main():
             print(f"[WARN] PDF 生成失败，HTML 在: {html_path}", file=sys.stderr)
 
     if args.feishu_push:
-        push_to_feishu(html_path, data)
+        push_to_feishu(html_path, data, ai_texts)
 
     if is_temp and args.pdf:
         try:

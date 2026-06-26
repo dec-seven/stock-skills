@@ -10,6 +10,9 @@ import sys
 import shutil
 import subprocess
 import tempfile
+import json
+import re
+from datetime import datetime
 
 
 # ==================== 数据处理工具 ====================
@@ -158,14 +161,15 @@ def get_feishu_user_id():
     return os.environ.get("FEISHU_USER_OPEN_ID", "")
 
 
-def push_to_feishu(html_path, title, summary, user_id=None):
-    """发送摘要 + HTML 文件到飞书私聊
+def push_to_feishu(html_path, data, ai_texts=None, cloudflare_url=None, user_id=None):
+    """推送早报/日报摘要到飞书，包含 Cloudflare 链接，不发送 HTML 文件
 
     Args:
-        html_path: HTML 文件路径
-        title: 消息标题
-        summary: 摘要文本
-        user_id: 用户 Open ID（可选，默认从环境变量读取）
+        html_path: HTML 文件路径（不再发送，仅用于日志）
+        data: market_data.json 字典
+        ai_texts: ai_texts.json 字典（可选）
+        cloudflare_url: Cloudflare 部署链接（可选）
+        user_id: 用户 Open ID（可选）
     """
     if user_id is None:
         user_id = get_feishu_user_id()
@@ -174,10 +178,71 @@ def push_to_feishu(html_path, title, summary, user_id=None):
         print("[WARN] 未配置 FEISHU_USER_OPEN_ID，跳过飞书推送", file=sys.stderr)
         return False
 
-    # 构建摘要
-    markdown = f"**{title}**\n\n{summary}"
+    # ── 从 data 提取关键信息 ──
+    title = "A股盘前早报"
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    indices = data.get("yesterday", {}).get("indices", [])
+    turnover = data.get("yesterday", {}).get("turnover", {}).get("total", 0)
+    breadth = data.get("yesterday", {}).get("market_breadth", {})
+    up_count = breadth.get("up_count", 0)
+    down_count = breadth.get("down_count", 0)
+    limit_up = breadth.get("limit_up", 0)
+    limit_down = breadth.get("limit_down", 0)
 
-    # 发送摘要
+    # 指数涨跌
+    index_lines = []
+    for idx in indices[:4]:
+        name = idx.get("name", "")
+        close = idx.get("close", "")
+        pct = idx.get("pct", 0)
+        emoji = "📈" if pct >= 0 else "📉"
+        index_lines.append(f"{emoji} {name} {close} ({pct:+.2f}%)")
+
+    # ── 从 ai_texts 提取策略 ──
+    direction = ""
+    position = ""
+    stocks = []
+    if ai_texts:
+        title = "A股盘前早报"
+        direction = ai_texts.get("DIRECTION_JUDGMENT", "")
+        sh_low = ai_texts.get("SH_RANGE_LOW", "")
+        sh_high = ai_texts.get("SH_RANGE_HIGH", "")
+        position = ai_texts.get("POSITION_ADVICE", "")
+        # 提取选股
+        stock_html = ai_texts.get("STOCK_SELECTION", "")
+        if stock_html:
+            stocks = re.findall(r'<span class="stock-name">([^<]+)</span>', stock_html)
+
+    # ── 构建 Markdown 摘要 ──
+    lines = [f"**{today_str} {title}**", ""]
+
+    if index_lines:
+        lines.append("**📊 市场概况**")
+        lines.extend(index_lines)
+        lines.append(f"成交额: {turnover:.0f}亿 | 涨{up_count} 跌{down_count} | 涨停{limit_up} 跌停{limit_down}")
+        lines.append("")
+
+    if direction:
+        lines.append(f"**🎯 方向判断: {direction}**")
+        if sh_low and sh_high:
+            lines.append(f"区间: {sh_low} - {sh_high}")
+        if position:
+            lines.append(f"仓位: {position}")
+        lines.append("")
+
+    if stocks:
+        lines.append(f"**⭐ 选股: {', '.join(stocks[:5])}**")
+        lines.append("")
+
+    if cloudflare_url:
+        lines.append(f"**[📄 查看完整报告]({cloudflare_url})**")
+        lines.append(f"[📈 股票跟踪]({cloudflare_url.rstrip('/')}/stock-tracker/)")
+    else:
+        lines.append("⚠️ 报告暂未部署到线上")
+
+    markdown = "\n".join(lines)
+
+    # ── 发送摘要 ──
     try:
         subprocess.run(
             [LARK_CLI, "im", "+messages-send",
@@ -186,45 +251,10 @@ def push_to_feishu(html_path, title, summary, user_id=None):
             check=True, timeout=30, capture_output=True,
         )
         print("[feishu] 摘要已推送", file=sys.stderr)
-    except subprocess.CalledProcessError as e:
-        print(f"[feishu] 摘要推送失败: {e.stderr.decode()[:200]}", file=sys.stderr)
-        return False
-
-    # 处理文件路径
-    abs_path = os.path.abspath(html_path)
-    cwd = os.getcwd()
-    try:
-        rel = os.path.relpath(abs_path, cwd)
-    except ValueError:
-        rel = os.path.basename(abs_path)
-    if rel.startswith(".."):
-        tmp_name = os.path.basename(abs_path)
-        tmp_path = os.path.join(cwd, tmp_name)
-        shutil.copy2(abs_path, tmp_path)
-        rel = tmp_name
-        copied = True
-    else:
-        copied = False
-
-    # 发送 HTML 文件
-    try:
-        subprocess.run(
-            [LARK_CLI, "im", "+messages-send",
-             "--user-id", user_id,
-             "--file", rel, "--as", "bot"],
-            cwd=cwd, check=True, timeout=60, capture_output=True,
-        )
-        print("[feishu] HTML 文件已推送", file=sys.stderr)
         return True
     except subprocess.CalledProcessError as e:
-        print(f"[feishu] 文件推送失败: {e.stderr.decode()[:200]}", file=sys.stderr)
+        print(f"[feishu] 推送失败: {e.stderr.decode()[:200]}", file=sys.stderr)
         return False
-    finally:
-        if copied:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
 
 
 # ==================== 重试工具 ====================

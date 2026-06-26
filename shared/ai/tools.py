@@ -164,7 +164,9 @@ class PushFeishuTool(Tool):
             "--html", html_path,
             "--feishu-push",
         ]
-        # 不再重复部署，仅推送
+        # 传递 cloudflare_url 给脚本
+        if cloudflare_url:
+            cmd.extend(["--cloudflare-url", cloudflare_url])
         result = self._run_script(cmd, timeout=120)
         if result.success:
             result.data = {"pushed": True, "cloudflare_url": cloudflare_url}

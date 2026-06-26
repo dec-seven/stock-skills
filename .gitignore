@@ -2,12 +2,18 @@
 .claude
 .venv
 .workbuddy
-knowledge-bases/stock-samples
+.idea/
+.knowledge-bases/stock-samples
 
 # 环境变量文件（可能包含敏感信息）
 .env
 .env.local
 .env.*.local
+
+# 集中管理的环境变量目录（排除敏感配置，保留模板）
+env/.env
+env/.env.*
+!env/.env.example
 
 # 本地配置文件
 config.json
@@ -49,3 +55,6 @@ requirements-tui.txt
 *.md.bak
 早报_*.md
 xhs_*.md
+*.py.bak
+# skill 内的敏感文件
+**/.env

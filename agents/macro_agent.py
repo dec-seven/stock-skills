@@ -18,6 +18,7 @@ import os
 import json
 from typing import Dict
 from .base import BaseAgent, AgentResult
+from shared.ai.market_facts import extract_market_facts, build_facts_summary
 
 
 # 每个 Agent 负责的 llm_analysis.json 字段
@@ -32,10 +33,13 @@ SYSTEM_PROMPT = """你是 A 股宏观市场分析师，负责：
 5. 给出今日方向预测 + 上证指数区间
 
 严格要求：
-- 数据必须基于提供的 market_data.json，不得编造
+- 数据必须基于“不可改写事实”和 market_data.json，不得编造
+- 不可改写事实优先级最高，输出不得与其冲突
+- 若主要指数多数下跌，禁止写“全线上涨/普涨/风险偏好提升”
+- 若下跌家数多于上涨家数，禁止写“情绪积极/赚钱效应强”
 - 方向判断要明确：偏多/震荡/偏空/防守
 - 区间要具体到点位（如 3150-3180）
-- 情绪分类只能选：sentiment-hot / sentiment-warm / sentiment-cold / sentiment-frozen
+- 情绪特征要描述市场情绪状态（如"市场情绪高涨，投资者信心充足"），不要返回 CSS 类名
 - 严谨严格，不自我安慰，高位高估值要折价
 
 输出 JSON 格式：
@@ -43,7 +47,7 @@ SYSTEM_PROMPT = """你是 A 股宏观市场分析师，负责：
   "MARKET_TONE": "一句话市场定调",
   "US_IMPACT_ON_A": "美股对 A 股影响（2-3句）",
   "GLOBAL_MARKET_ANALYSIS": "全球市场对 A 股影响（1-2句）",
-  "EMOTION_FEATURE": "情绪特征描述",
+  "EMOTION_FEATURE": "情绪特征描述（如：市场情绪高涨，投资者追涨意愿强）",
   "TODAY_PREDICTION": {
     "direction": "偏多|震荡|偏空|防守",
     "sh_range_low": 3150,
@@ -104,9 +108,9 @@ class MacroAgent(BaseAgent):
         global_markets = market_data.get("global_markets", {})
         breadth = yesterday.get("market_breadth", {})
         turnover = yesterday.get("turnover", {})
-        north_bound = yesterday.get("north_bound", {})
+        facts = extract_market_facts(market_data)
 
-        lines = ["## 市场数据（请基于此分析）", ""]
+        lines = [build_facts_summary(facts), "", "## 市场数据（请基于此分析）", ""]
 
         # A 股指数
         if indices:
@@ -114,14 +118,14 @@ class MacroAgent(BaseAgent):
             for idx in indices:
                 name = idx.get("name", "")
                 close = idx.get("close", "")
-                pct = idx.get("pct_change", "")
+                pct = idx.get("pct", idx.get("pct_change", ""))
                 lines.append(f"- {name}: 收盘 {close}, 涨跌幅 {pct}%")
             lines.append("")
 
         # 涨跌家数
         if breadth:
             lines.append("### 涨跌家数")
-            lines.append(f"- 上涨 {breadth.get('advancing', 'N/A')} 家，下跌 {breadth.get('declining', 'N/A')} 家")
+            lines.append(f"- 上涨 {breadth.get('up_count', breadth.get('advancing', 'N/A'))} 家，下跌 {breadth.get('down_count', breadth.get('declining', 'N/A'))} 家")
             lines.append(f"- 涨停 {breadth.get('limit_up', 'N/A')} 家，跌停 {breadth.get('limit_down', 'N/A')} 家")
             lines.append("")
 
@@ -136,7 +140,8 @@ class MacroAgent(BaseAgent):
             for key in ["dow", "sp500", "nasdaq", "vix", "sox", "nvda", "tsla", "oil", "gold"]:
                 item = overnight_us.get(key, {})
                 if item:
-                    lines.append(f"- {item.get('name', key)}: {item.get('close', 'N/A')}, 涨跌 {item.get('pct_change', 'N/A')}%, 原因: {item.get('reason', 'N/A')}")
+                    pct = item.get('pct', item.get('pct_change', 'N/A'))
+                    lines.append(f"- {item.get('name', key)}: {item.get('close', 'N/A')}, 涨跌 {pct}%, 原因: {item.get('reason', 'N/A')}")
             lines.append("")
 
         # 全球市场
@@ -145,7 +150,8 @@ class MacroAgent(BaseAgent):
             for key in ["nikkei", "hsi", "dxy", "cnh"]:
                 item = global_markets.get(key, {})
                 if item:
-                    lines.append(f"- {item.get('name', key)}: {item.get('close', 'N/A')}, 涨跌 {item.get('pct_change', 'N/A')}%")
+                    pct = item.get("pct") if item.get("pct") is not None else item.get("pct_change", "")
+                    lines.append(f"- {item.get('name', key)}: {item.get('close', 'N/A')}, 涨跌 {pct}%")
             lines.append("")
 
         lines.append("请输出 JSON（含 MARKET_TONE/US_IMPACT_ON_A/GLOBAL_MARKET_ANALYSIS/EMOTION_FEATURE/TODAY_PREDICTION）。")

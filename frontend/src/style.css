@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 深蓝商务风主题色 */
+:root {
+  --navy-deep: #0a1628;
+  --navy-card: #0f2044;
+  --navy-light: #163a6e;
+  --blue-accent: #4fc3f7;
+  --blue-glow: rgba(79, 195, 247, 0.25);
+  --gold: #f0c14b;
+  --gold-soft: #c9a227;
+  --gold-glow: rgba(240, 193, 75, 0.15);
+  --red-up: #ff5252;
+  --red-glow: rgba(255, 82, 82, 0.2);
+  --green-down: #69f0ae;
+  --green-glow: rgba(105, 240, 174, 0.2);
+  --yellow-warn: #ffd740;
+  --yellow-glow: rgba(255, 215, 64, 0.15);
+  --text-primary: #e8e8e8;
+  --text-secondary: #8899aa;
+  --text-muted: #556677;
+  --border: rgba(79, 195, 247, 0.18);
+  --border-gold: rgba(240, 193, 75, 0.25);
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  background: var(--navy-deep);
+  color: var(--text-primary);
+  line-height: 1.75;
+  min-height: 100vh;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--navy-deep);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--navy-light);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--blue-accent);
+}

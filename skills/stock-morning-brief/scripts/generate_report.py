@@ -353,16 +353,19 @@ def build_a_review_table_html(data):
     else:
         rows += f'<tr><td>上涨/下跌家数</td><td class="num">—</td><td>待补充</td></tr>'
     
-    # 北向资金 - 修复：读取 net_inflow 字段
-    north_amount = north.get("net_inflow", 0) or 0
-    if north_amount != 0:
+    # 北向资金 - 修复：读取 net_inflow 字段，处理 NaN/None
+    import math
+    north_amount = north.get("net_inflow")
+    is_nan = north_amount is None or (isinstance(north_amount, float) and math.isnan(north_amount))
+    
+    if not is_nan and north_amount != 0:
         north_cls = "up" if north_amount > 0 else "down"
         north_sign = "+" if north_amount > 0 else ""
         north_note = "外资净流入" if north_amount > 0 else "外资净流出"
         color_var = "red-up" if north_amount > 0 else "green-down"
         rows += f'<tr><td>北向资金</td><td class="num" style="color:var(--{color_var});">净流入 {north_sign}{north_amount:.0f}亿</td><td>{north_note}</td></tr>'
     else:
-        rows += f'<tr><td>北向资金</td><td class="num">—</td><td>待补充</td></tr>'
+        rows += f'<tr><td>北向资金</td><td class="num">—</td><td>数据停更</td></tr>'
     
     # 领涨领跌板块
     top_gainers = sectors.get("top_gainers", [])
@@ -645,6 +648,10 @@ def update_stock_tracker(args, data):
     # Keep the default tracker HTML in the same location to avoid deploying stale pages.
     tracker_html = args.stock_tracker_html or os.path.join(SKILL_DIR, "tmp", "stock_tracker.html")
     tracker_script = os.path.join(SCRIPT_DIR, "stock_tracker.py")
+    if not os.path.exists(tracker_script):
+        legacy_script = os.path.join(SCRIPT_DIR, "legacy", "stock_tracker.py")
+        if os.path.exists(legacy_script):
+            tracker_script = legacy_script
 
     cmd = [
         sys.executable,
@@ -657,6 +664,9 @@ def update_stock_tracker(args, data):
         "--html", tracker_html,
     ]
     env = os.environ.copy()
+    # legacy/stock_tracker.py imports utils.py living in SCRIPT_DIR; ensure it's importable.
+    existing_pp = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = SCRIPT_DIR + (os.pathsep + existing_pp if existing_pp else "")
     if env.get("MARKET_DATA_USE_PROXY", "0") != "1":
         for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
             env.pop(key, None)
@@ -694,6 +704,7 @@ def main():
     parser.add_argument("--stock-tracker-json", default=None, help="股票跟踪 JSON 路径")
     parser.add_argument("--stock-tracker-html", default=None, help="股票跟踪 HTML 输出路径")
     parser.add_argument("--no-stock-tracker", action="store_true", default=False, help="跳过入选股票跟踪更新")
+    parser.add_argument("--cloudflare-url", default=None, help="Cloudflare Pages 部署 URL（用于飞书推送）")
     args = parser.parse_args()
     
     if not args.html and not args.pdf:
@@ -772,7 +783,8 @@ def main():
             sys.exit(1)
     
     if args.feishu_push:
-        push_to_feishu(html_path, data, cloudflare_url)
+        # 优先使用命令行传入的 cloudflare_url，否则使用部署生成的
+        push_to_feishu(html_path, data, ai_texts, args.cloudflare_url or cloudflare_url)
     
     if is_temp and args.pdf:
         try:

@@ -16,6 +16,7 @@ LLM 客户端：双模式封装。
 import os
 import json
 import time
+import ssl
 import urllib.request
 import urllib.error
 from dataclasses import dataclass
@@ -114,7 +115,11 @@ class LLMClient:
         for attempt in range(self.MAX_RETRIES):
             start = time.time()
             try:
-                with urllib.request.urlopen(req, timeout=self.DEFAULT_TIMEOUT) as resp:
+                # 跳过 SSL 验证（代理环境自签证书）
+                ssl_ctx = ssl.create_default_context()
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(req, timeout=self.DEFAULT_TIMEOUT, context=ssl_ctx) as resp:
                     body = json.loads(resp.read().decode("utf-8"))
                     duration_ms = int((time.time() - start) * 1000)
                     content = body["choices"][0]["message"]["content"]
